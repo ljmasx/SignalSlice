@@ -59,8 +59,8 @@ def add_security_headers(response):
 
 # Global state for dashboard
 dashboard_state = {
-    'pizza_index': 3.42,
-    'gay_bar_index': 6.58,  # Inverse of pizza - starts higher
+    'pizza_index': 0,  # Calculated from real scraped data after first scan
+    'gay_bar_index': 0,  # Calculated from real scraped data after first scan
     'active_locations': ACTIVE_LOCATIONS,
     'scan_count': 0,
     'anomaly_count': 0,

@@ -17,8 +17,8 @@ class SignalSliceMonitor {
         this.anomalyCount = 0;
         this.lastUpdateTime = new Date();
         this.lastScanTime = null;        this.socket = null;
-        this.pizzaIndex = 3.42;
-        this.gayBarIndex = 6.58;
+        this.pizzaIndex = 0;  // Updated from real data after first scan
+        this.gayBarIndex = 0;  // Updated from real data after first scan
         // Read active locations from HTML data attribute (set by server)
         this.activeLocations = parseInt(document.body.dataset.activeLocations) || 10;
         this.lastActivityTimestamp = null;
