@@ -229,40 +229,43 @@ def run_scanner_cycle():
                 logger.warning("No restaurant data in scraped results")
                 add_activity_item('WARNING', '⚠️ No restaurant data found', 'warning')
             
-            # Calculate gay bar index from scraped data
-            if gay_bar_data:
-                logger.info(f"Processing {len(gay_bar_data)} gay bar data points")
-                gay_bar_with_data = [d for d in gay_bar_data if d.get('busyness_percent') is not None]
-                logger.info(f"Found {len(gay_bar_with_data)} gay bars with busyness data")
-                if gay_bar_with_data:
+            # Calculate gay bar index from scraped data (includes sports bars with same weight)
+            sports_bar_data = [d for d in scraped_data if d.get('venue_type') == 'sports_bar']
+            combined_bar_data = gay_bar_data + sports_bar_data
+
+            if combined_bar_data:
+                logger.info(f"Processing {len(gay_bar_data)} gay bar + {len(sports_bar_data)} sports bar data points")
+                bars_with_data = [d for d in combined_bar_data if d.get('busyness_percent') is not None]
+                logger.info(f"Found {len(bars_with_data)} bars with busyness data")
+                if bars_with_data:
                     try:
                         # Ensure all busyness values are valid integers
                         busyness_values = []
-                        for d in gay_bar_with_data:
+                        for d in bars_with_data:
                             if isinstance(d['busyness_percent'], (int, float)):
                                 busyness_values.append(float(d['busyness_percent']))
-                        
+
                         if busyness_values:
-                            avg_gay_bar_busy = sum(busyness_values) / len(busyness_values)
+                            avg_bar_busy = sum(busyness_values) / len(busyness_values)
                             # Convert to 0-10 scale inversely (0% busy = 10, 100% busy = 0)
-                            new_gay_bar_index = 10 - (avg_gay_bar_busy / 10)
+                            new_gay_bar_index = 10 - (avg_bar_busy / 10)
                             change_percent = ((new_gay_bar_index - dashboard_state['gay_bar_index']) / dashboard_state['gay_bar_index']) * 100 if dashboard_state['gay_bar_index'] > 0 else 0
                             update_gay_bar_index(new_gay_bar_index, change_percent)
-                            add_activity_item('GAYBAR', f'🏳️‍🌈 Gay Bar Index updated: {new_gay_bar_index:.2f} ({avg_gay_bar_busy:.0f}% busy)', 'normal')
+                            add_activity_item('GAYBAR', f'🏳️‍🌈 Bar Index updated: {new_gay_bar_index:.2f} ({avg_bar_busy:.0f}% busy)', 'normal')
                             # logger.debug(f"Gay bar index updated to {new_gay_bar_index:.2f}")
                         else:
-                            logger.warning("No valid busyness values found for gay bars")
-                            add_activity_item('WARNING', '⚠️ No valid gay bar busyness data', 'warning')
+                            logger.warning("No valid busyness values found for bars")
+                            add_activity_item('WARNING', '⚠️ No valid bar busyness data', 'warning')
                     except Exception as e:
-                        logger.error(f"Error calculating gay bar index: {e}")
-                        add_activity_item('ERROR', 'Failed to calculate gay bar index', 'warning')
+                        logger.error(f"Error calculating bar index: {e}")
+                        add_activity_item('ERROR', 'Failed to calculate bar index', 'warning')
                 else:
-                    logger.info("No gay bars with busyness data found")
-                    add_activity_item('INFO', '📊 No gay bar busyness data available', 'normal')
+                    logger.info("No bars with busyness data found")
+                    add_activity_item('INFO', '📊 No bar busyness data available', 'normal')
             else:
-                logger.warning("No gay bar data in scraped results")
-                add_activity_item('GAYBAR', '⚠️ No gay bar data available this scan', 'warning')
-                
+                logger.warning("No bar data in scraped results")
+                add_activity_item('GAYBAR', '⚠️ No bar data available this scan', 'warning')
+
         except Exception as e:
             error_msg = sanitize_string(str(e), 200)
             add_activity_item('ERROR', f'❌ Scraping failed: {error_msg}', 'critical')
@@ -533,8 +536,11 @@ def handle_manual_scan():
 
 # Initialize with some activity
 add_activity_item('INIT', 'SignalSlice dashboard initialized', 'normal')
-add_activity_item('SYSTEM', 'Monitoring 127 pizza locations in 50-mile radius', 'normal')
-add_activity_item('GAYBAR', '🏳️‍🌈 Gay Bar Index monitoring active', 'normal')
+add_activity_item('SYSTEM', 'Monitoring 8 pizza locations + 2 bars near Pentagon', 'normal')
+add_activity_item('GAYBAR', '🏳️‍🌈 Gay Bar + 🏈 Sports Bar monitoring active', 'normal')
+
+# Start scanner at module load (works with both direct run and Gunicorn)
+start_scanner()
 
 if __name__ == '__main__':
     logger.info("🛰️ SignalSlice Dashboard Starting...")

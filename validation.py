@@ -14,7 +14,7 @@ VALID_HOURS_24 = list(range(0, 25))  # 0-24 (24 represents midnight of previous 
 VALID_HOURS_12 = list(range(1, 13))  # 1-12
 VALID_MERIDIEMS = ["AM", "PM"]
 VALID_DATA_TYPES = ["LIVE", "HISTORICAL", "NO_DATA"]
-VALID_VENUE_TYPES = ["restaurant", "gay_bar"]
+VALID_VENUE_TYPES = ["restaurant", "gay_bar", "sports_bar"]
 BUSYNESS_MIN = 0
 BUSYNESS_MAX = 100
 

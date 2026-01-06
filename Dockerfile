@@ -53,5 +53,5 @@ ENV FLASK_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
     CMD curl -f http://localhost:5000/api/status || exit 1
 
-# Run with Gunicorn + Eventlet for production
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
+# Run with Gunicorn + GeventWebSocket for production (Python 3.12 compatible)
+CMD ["gunicorn", "--worker-class", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "-w", "1", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
