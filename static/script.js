@@ -19,7 +19,8 @@ class SignalSliceMonitor {
         this.lastScanTime = null;        this.socket = null;
         this.pizzaIndex = 3.42;
         this.gayBarIndex = 6.58;
-        this.activeLocations = 127;
+        // Read active locations from HTML data attribute (set by server)
+        this.activeLocations = parseInt(document.body.dataset.activeLocations) || 10;
         this.lastActivityTimestamp = null;
         
         // MEMORY OPTIMIZATION: Improved throttling and limits
@@ -979,9 +980,9 @@ class SignalSliceMonitor {
     generateInitialActivity() {
         // MEMORY OPTIMIZATION: Reduced initial activities to prevent memory buildup
         const activities = [
-            { type: 'INIT', message: 'Surveillance system online - 127 locations monitored', level: 'normal' },
+            { type: 'INIT', message: `Surveillance system online - ${this.activeLocations} locations monitored`, level: 'normal' },
             { type: 'CONNECT', message: 'Real-time data feeds established', level: 'normal' },
-            { type: 'SCAN', message: 'Google Maps API: 127 active locations confirmed', level: 'normal' }
+            { type: 'SCAN', message: `Google Maps API: ${this.activeLocations} active locations confirmed`, level: 'normal' }
         ];
         
         activities.forEach((activity, index) => {

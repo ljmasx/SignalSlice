@@ -19,7 +19,10 @@ import re
 import traceback
 from functools import wraps
 from script.anomalyDetect import check_current_anomalies
-from scraping.gmapsScrape import scrape_current_hour
+from scraping.gmapsScrape import scrape_current_hour, RESTAURANT_URLS, GAY_BAR_URLS, SPORTS_BAR_URLS
+
+# Calculate actual number of monitored locations
+ACTIVE_LOCATIONS = len(RESTAURANT_URLS) + len(GAY_BAR_URLS) + len(SPORTS_BAR_URLS)
 from validation import (
     ValidationError, validate_index_value, validate_activity_item,
     validate_batch_data, sanitize_string
@@ -58,7 +61,7 @@ def add_security_headers(response):
 dashboard_state = {
     'pizza_index': 3.42,
     'gay_bar_index': 6.58,  # Inverse of pizza - starts higher
-    'active_locations': 127,
+    'active_locations': ACTIVE_LOCATIONS,
     'scan_count': 0,
     'anomaly_count': 0,
     'last_scan_time': None,
@@ -417,7 +420,7 @@ def stop_scanner():
 @app.route('/')
 def index():
     """Serve the main dashboard"""
-    return render_template('index.html')
+    return render_template('index.html', active_locations=ACTIVE_LOCATIONS)
 
 @app.route('/api/activity_feed')
 def get_activity_feed():

@@ -9,7 +9,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
+<body data-active-locations="{{ active_locations }}">
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <div class="surveillance-grid"></div>
     <div class="radar-sweep"></div>
@@ -117,7 +117,7 @@
                         </svg>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-value" id="active-locations" aria-label="Number of active locations being monitored">127</div>
+                        <div class="stat-value" id="active-locations" aria-label="Number of active locations being monitored">{{ active_locations }}</div>
                         <div class="stat-label">ACTIVE LOCATIONS</div>
                         <div class="stat-sublabel">50mi radius</div>
                     </div>
@@ -236,7 +236,7 @@
                         <div class="status-item online">
                             <div class="status-dot"></div>
                             <span>Google Maps API</span>
-                            <div class="status-value">127 locations</div>
+                            <div class="status-value">{{ active_locations }} locations</div>
                         </div>
                         <div class="status-item online">
                             <div class="status-dot"></div>

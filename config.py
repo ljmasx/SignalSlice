@@ -24,10 +24,11 @@ SCANNER_RETRY_DELAY = 300   # 5 minutes retry delay on error
 SCANNER_HOUR_BUFFER = 30    # seconds buffer after hour mark
 
 # Dashboard Configuration
+# Note: active_locations is calculated dynamically in app.py from URL lists
 DASHBOARD_DEFAULTS = {
     'pizza_index': 3.42,
     'gay_bar_index': 6.58,
-    'active_locations': 127,
+    'active_locations': None,  # Calculated from RESTAURANT_URLS + GAY_BAR_URLS + SPORTS_BAR_URLS
     'scan_count': 0,
     'anomaly_count': 0,
     'last_scan_time': None,
