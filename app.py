@@ -205,11 +205,18 @@ def run_scanner_cycle():
                 logger.info(f"Found {len(restaurant_with_data)} restaurants with busyness data")
                 if restaurant_with_data:
                     try:
-                        # Ensure all busyness values are valid integers
+                        # Ensure all busyness values are valid numbers (handles strings too)
                         busyness_values = []
                         for d in restaurant_with_data:
-                            if isinstance(d['busyness_percent'], (int, float)):
-                                busyness_values.append(float(d['busyness_percent']))
+                            bp = d['busyness_percent']
+                            if isinstance(bp, (int, float)):
+                                busyness_values.append(float(bp))
+                            elif isinstance(bp, str):
+                                # Handle string values like '52' from scraper
+                                try:
+                                    busyness_values.append(float(bp))
+                                except ValueError:
+                                    logger.warning(f"Could not convert busyness_percent '{bp}' to float")
                         
                         if busyness_values:
                             avg_restaurant_busy = sum(busyness_values) / len(busyness_values)
@@ -242,11 +249,18 @@ def run_scanner_cycle():
                 logger.info(f"Found {len(bars_with_data)} bars with busyness data")
                 if bars_with_data:
                     try:
-                        # Ensure all busyness values are valid integers
+                        # Ensure all busyness values are valid numbers (handles strings too)
                         busyness_values = []
                         for d in bars_with_data:
-                            if isinstance(d['busyness_percent'], (int, float)):
-                                busyness_values.append(float(d['busyness_percent']))
+                            bp = d['busyness_percent']
+                            if isinstance(bp, (int, float)):
+                                busyness_values.append(float(bp))
+                            elif isinstance(bp, str):
+                                # Handle string values like '52' from scraper
+                                try:
+                                    busyness_values.append(float(bp))
+                                except ValueError:
+                                    logger.warning(f"Could not convert busyness_percent '{bp}' to float")
 
                         if busyness_values:
                             avg_bar_busy = sum(busyness_values) / len(busyness_values)
