@@ -624,16 +624,27 @@ class SignalSliceMonitor {
             const element = document.getElementById('pizza-index');
             const changeElement = document.getElementById('pizza-change');
             const cardElement = document.getElementById('pizza-index-card');
-            
+
             if (!element) {
                 return;
             }
-            
+
+            // Show error message if no data (value is 0)
+            if (value === 0 || value === null || value === undefined) {
+                element.textContent = '—';
+                element.title = 'En attente de données...';
+                if (changeElement) {
+                    changeElement.textContent = 'Pas de données';
+                    changeElement.className = 'stat-change warning';
+                }
+                return;
+            }
+
             const currentValue = parseFloat(element.textContent) || 0;
             const change = value - currentValue;
-            const calculatedChangePercent = changePercent !== null ? changePercent : 
+            const calculatedChangePercent = changePercent !== null ? changePercent :
                 (currentValue > 0 ? ((change / currentValue) * 100) : 0);
-            
+
             this.animateNumber(element, currentValue, value, 1000);
             
             if (changeElement) {
@@ -681,16 +692,27 @@ class SignalSliceMonitor {
             const element = document.getElementById('gay-bar-index');
             const changeElement = document.getElementById('gay-bar-change');
             const cardElement = document.getElementById('gay-bar-index-card');
-            
+
             if (!element) {
                 return;
             }
-            
+
+            // Show error message if no data (value is 0)
+            if (value === 0 || value === null || value === undefined) {
+                element.textContent = '—';
+                element.title = 'En attente de données...';
+                if (changeElement) {
+                    changeElement.textContent = 'Pas de données';
+                    changeElement.className = 'stat-change warning';
+                }
+                return;
+            }
+
             const currentValue = parseFloat(element.textContent) || 0;
             const change = value - currentValue;
-            const calculatedChangePercent = changePercent !== null ? changePercent : 
+            const calculatedChangePercent = changePercent !== null ? changePercent :
                 (currentValue > 0 ? ((change / currentValue) * 100) : 0);
-        this.animateNumber(element, currentValue, value, 1000);
+            this.animateNumber(element, currentValue, value, 1000);
         
         if (changeElement) {
             changeElement.textContent = `${calculatedChangePercent >= 0 ? '+' : ''}${calculatedChangePercent.toFixed(2)}%`;
