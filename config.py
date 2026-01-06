@@ -76,13 +76,22 @@ DATA_FILE_PATTERNS = {
 
 # Venue URLs Configuration
 RESTAURANT_URLS = [
-    "https://maps.app.goo.gl/KqSr8hH5GV4ZGJP27",
-    # Add more restaurant URLs here
+    "https://maps.app.goo.gl/XfCcjGbFchX6GwbS6",  # We The Pizza
+    "https://maps.app.goo.gl/xiBEPisiFWZWbjgH6",  # Wiseguy Pizza Pentagon City
+    "https://maps.app.goo.gl/Qtephz6bS1xspR568",  # Extreme Pizza
+    "https://maps.app.goo.gl/WbuP6DADmwzyih5J8",  # Pizzato Pizza
+    "https://maps.app.goo.gl/hjbdLgKxtpZTg4gGA",  # Matchbox Pentagon City
+    "https://maps.app.goo.gl/zywFkKdy27Xa3ixe6",  # Villa Pizza
+    "https://maps.app.goo.gl/CM22GsozZupYyqVQ8",  # California Pizza Kitchen
+    "https://maps.app.goo.gl/AEEmDgA3ZsbreCgc8",  # Domino's Pizza
 ]
 
 GAY_BAR_URLS = [
-    "https://maps.app.goo.gl/PKRdT6pYjJ4uKEUJA",
-    # Add more gay bar URLs here
+    "https://maps.app.goo.gl/4pvjcqoabLzr1ak87",  # Freddie's Beach Bar
+]
+
+SPORTS_BAR_URLS = [
+    "https://maps.app.goo.gl/84sX3twWH3MTyZkm6",  # Crystal City Sports Pub
 ]
 
 # Live Data Detection Patterns

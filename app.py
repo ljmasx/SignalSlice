@@ -178,8 +178,9 @@ def run_scanner_cycle():
 
         # Run the actual scraping (now SYNC)
         try:
+            logger.info("🔍 DEBUG: ABOUT TO CALL scrape_current_hour()...")
             scraped_data = scrape_current_hour()
-            logger.info(f"🔍 DEBUG: Scraped {len(scraped_data)} data points from scraper")
+            logger.info(f"🔍 DEBUG: scrape_current_hour() RETURNED {len(scraped_data)} items")
 
             # DEBUG: Log first item to see structure
             if scraped_data:
@@ -309,6 +310,7 @@ def run_scanner_cycle():
         except Exception as e:
             error_msg = sanitize_string(str(e), 200)
             add_activity_item('ERROR', f'❌ Scraping failed: {error_msg}', 'critical')
+            logger.error(f"🔍 DEBUG: EXCEPTION in scrape_current_hour(): {e}")
             logger.error(f"Error in scraping: {e}", exc_info=True)
         
         # Step 2: Check for anomalies with detailed progress
