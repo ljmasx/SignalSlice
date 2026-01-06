@@ -565,7 +565,8 @@ def scrape_current_hour():
             "hour_12", "meridiem", "hour_label", "busyness_percent", "raw_aria_label",
             "is_target_hour", "target_weekday", "target_hour", "detected_cycle",
             "cycle_hours_count", "cycle_start_hour", "cycle_end_hour", "assigned_weekday",
-            "day_offset", "is_today_cycle", "is_target_cycle", "selected_as_target"
+            "day_offset", "is_today_cycle", "is_target_cycle", "selected_as_target",
+            "venue_type", "confidence", "live_flag"
         ]
         with open(scraped_data_file, "w", newline='', encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=scraped_fieldnames)
@@ -581,7 +582,7 @@ def scrape_current_hour():
     current_hour_file = f"data/current_hour_{current_time.strftime('%Y%m%d_%H')}.csv"
     os.makedirs("data", exist_ok=True)
     
-    fieldnames = ["restaurant_url", "weekday", "hour_24", "hour_label", "timestamp", "value", "busyness_percent", "data_type", "venue_type"]
+    fieldnames = ["restaurant_url", "weekday", "hour_24", "hour_label", "timestamp", "value", "busyness_percent", "data_type", "venue_type", "confidence", "live_flag"]
     with open(current_hour_file, "w", newline='', encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
