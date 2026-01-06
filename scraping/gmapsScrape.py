@@ -1,17 +1,15 @@
-import asyncio
 import csv
 import random
 import time
 import re
 import os
 import logging
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 import pytz
 from datetime import datetime, timedelta
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from validation import validate_busyness_percent, validate_url, ValidationError
-import logging
 # Configure logging
 logger = logging.getLogger(__name__)
 RESTAURANT_URLS = [
@@ -27,16 +25,17 @@ DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 START_HOUR = 6
 HOURS_PER_DAY = 20
 EST = pytz.timezone('US/Eastern')
-async def scrape_popular_times(page, restaurant_url, index_offset):
+def scrape_popular_times(page, restaurant_url, index_offset):
+    """Scrape popular times data (SYNC version for eventlet compatibility)"""
     data = []
-    await page.goto(restaurant_url, timeout=60000)
-    await page.wait_for_timeout(4000)  # Let the page settle/load
+    page.goto(restaurant_url, timeout=60000)
+    page.wait_for_timeout(4000)  # Let the page settle/load
 
-    elements = await page.query_selector_all('div[aria-label*="Popular times"] [aria-label*="at"]')
+    elements = page.query_selector_all('div[aria-label*="Popular times"] [aria-label*="at"]')
     aria_labels = []
-    
+
     for el in elements:
-        aria = await el.get_attribute('aria-label')
+        aria = el.get_attribute('aria-label')
         if aria and re.search(r"\d+% busy", aria):
             aria_labels.append(aria.strip())
 
@@ -101,8 +100,8 @@ async def scrape_popular_times(page, restaurant_url, index_offset):
             logger.warning(f"   Raw bytes: {repr(label)}")
     return structured
 
-async def scrape_current_hour():
-    """Scrape only the current hour's data for all restaurants"""
+def scrape_current_hour():
+    """Scrape only the current hour's data for all restaurants (SYNC version)"""
     # Get current time in EST
     current_time = datetime.now(EST)
     current_weekday = current_time.strftime('%A')
@@ -119,14 +118,14 @@ async def scrape_current_hour():
         target_hour = current_hour_24
         logger.info(f"🕐 Current EST time: {current_time.strftime('%A %I:%M %p')} (Hour {current_hour_24})")
         logger.info(f"📅 Looking for TODAY's ({target_weekday}) data at hour {target_hour}")
-    
+
     logger.info(f"🎯 Priority: LIVE data > Historical data > No data")
-    
+
     results = []
     all_scraped_data = []
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
         # Process both restaurants and gay bars
         all_urls = []
         for url in RESTAURANT_URLS:
@@ -145,8 +144,8 @@ async def scrape_current_hour():
         for url, venue_type in all_urls:
             try:
                 logger.info(f"\n🔍 Checking current hour for: {url} (Type: {venue_type})")
-                await page.goto(url, timeout=60000)
-                await page.wait_for_timeout(4000)
+                page.goto(url, timeout=60000)
+                page.wait_for_timeout(4000)
 
                 # STEP 1: Look for LIVE data first
                 logger.info(f"  🔴 Step 1: Searching for LIVE data...")
@@ -161,7 +160,7 @@ async def scrape_current_hour():
                     r"usually not busy": {"flag": False, "confidence": "LOW", "estimated_percentage": 15},
                 }
                 # Get all text content from the page
-                page_text = await page.evaluate('document.body.innerText')
+                page_text = page.evaluate('document.body.innerText')
                 logger.debug(f"    📝 Scanning page text for live indicators...")
                 
                 live_text_indicator = None
@@ -184,10 +183,10 @@ async def scrape_current_hour():
                 ]
                 for selector in live_percentage_selectors:
                     try:
-                        elements = await page.query_selector_all(selector)
+                        elements = page.query_selector_all(selector)
                         logger.debug(f"    📊 Checking selector '{selector}': found {len(elements)} elements")
                         for el in elements:
-                            aria = await el.get_attribute('aria-label')
+                            aria = el.get_attribute('aria-label')
                             if not aria:
                                 continue
                                 
@@ -240,12 +239,12 @@ async def scrape_current_hour():
                 if not live_data:
                     logger.info(f"  📊 Step 2: No live data found, using historical data...")
                     
-                    elements = await page.query_selector_all('div[aria-label*="Popular times"] [aria-label*="at"]')
+                    elements = page.query_selector_all('div[aria-label*="Popular times"] [aria-label*="at"]')
                     logger.info(f"  📊 Found {len(elements)} total time elements")
-                    
+
                     all_time_data = []
                     for i, el in enumerate(elements):
-                        aria = await el.get_attribute('aria-label')
+                        aria = el.get_attribute('aria-label')
                         if not aria or not re.search(r"\d+% busy", aria):
                             continue
                         time_match = re.search(r"at (\d{1,2})\u202f(AM|PM)\.?", aria)
@@ -401,8 +400,8 @@ async def scrape_current_hour():
                             
             except Exception as e:
                 logger.info(f"❌ Error scraping {url}: {e}")
-            await asyncio.sleep(2)
-        await browser.close()
+            time.sleep(2)
+        browser.close()
     # Save all scraped data to CSV
     if all_scraped_data:
         scraped_data_file = f"data/all_scraped_data_{current_time.strftime('%Y%m%d_%H%M%S')}.csv"
@@ -437,17 +436,18 @@ async def scrape_current_hour():
     logger.info(f"✅ Current hour data saved to {current_hour_file}")
     return results
 
-async def main():
+def main():
+    """Main function for standalone scraping (SYNC version)"""
     results = []
     index_offset = 0
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        page = await browser.new_page()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page()
 
         for url in RESTAURANT_URLS:
             logger.info(f"🔍 Scraping: {url}")
             try:
-                data = await scrape_popular_times(page, url, index_offset)
+                data = scrape_popular_times(page, url, index_offset)
                 results.extend(data)
                 index_offset += len(data)
             except Exception as e:
@@ -456,7 +456,7 @@ async def main():
             logger.info(f"⏳ Waiting {delay:.2f} seconds...\n")
             time.sleep(delay)
 
-        await browser.close()
+        browser.close()
 
     # Save to CSV
     fieldnames = ["restaurant_url", "weekday", "hour_24", "hour_label", "index", "value", "busyness_percent"]
@@ -466,9 +466,9 @@ async def main():
         writer.writerows(results)
 
     logger.info(f"✅ Done! Data saved to `{OUTPUT_FILE}`.")
-    
+
+
 # --- RUN ---
 if __name__ == "__main__":
-    asyncio.run(main())
-    asyncio.run(main())
+    main()
 

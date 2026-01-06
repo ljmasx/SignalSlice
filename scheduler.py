@@ -1,4 +1,3 @@
-import asyncio
 import time
 import logging
 import os
@@ -56,56 +55,57 @@ def clean_log_message(message):
                               "]+", flags=re.UNICODE)
     return emoji_pattern.sub('', message).strip()
 
-async def hourly_scan():
-    """Perform one complete scan cycle"""
+def hourly_scan():
+    """Perform one complete scan cycle (SYNC version)"""
     try:
         current_time = datetime.now(EST)
         print(f"🕐 Starting hourly scan at {current_time.strftime('%Y-%m-%d %H:%M:%S EST')}")
         logger.info(clean_log_message(f"Starting hourly scan at {current_time.strftime('%Y-%m-%d %H:%M:%S EST')}"))
-        # Step 1: Scrape current hour data
+        # Step 1: Scrape current hour data (now SYNC)
         logger.info("📡 Scraping current hour data...")
-        await scrape_current_hour()
-        
+        scrape_current_hour()
+
         # Step 2: Check for anomalies
         logger.info("🔍 Checking for anomalies...")
         anomalies_found = check_current_anomalies()
-        
+
         if anomalies_found:
             logger.warning("🚨 ANOMALIES DETECTED! Check the output above.")
         else:
             logger.info("✅ No anomalies detected this hour.")
         logger.info(f"✅ Scan completed at {datetime.now(EST).strftime('%H:%M:%S EST')}")
-        
+
     except Exception as e:
         logger.error(f"❌ Error during hourly scan: {e}")
-async def main():
-    """Main scheduler loop"""
+def main():
+    """Main scheduler loop (SYNC version)"""
     logger.info("🛰️ SignalSlice Scanner Starting...")
     logger.info("🔄 Running initial scan, then switching to hourly schedule")
-    
+
     # Run initial scan
-    await hourly_scan()
-    
+    hourly_scan()
+
     while True:
         try:
             # Calculate time until next hour
             sleep_seconds = get_next_hour_start()
             next_run = datetime.now(EST) + timedelta(seconds=sleep_seconds)
-            
+
             logger.info(f"⏰ Next scan scheduled for {next_run.strftime('%H:%M:%S EST')} ({sleep_seconds/60:.1f} minutes)")
-            
+
             # Sleep until next hour (with small buffer to ensure we're past the hour mark)
-            await asyncio.sleep(sleep_seconds + 30)
+            time.sleep(sleep_seconds + 30)
             # Run the scan
-            await hourly_scan()
-            
+            hourly_scan()
+
         except KeyboardInterrupt:
             logger.info("🛑 Scheduler stopped by user")
             break
         except Exception as e:
             logger.error(f"❌ Unexpected error in main loop: {e}")
             # Wait 5 minutes before retrying to avoid rapid failures
-            await asyncio.sleep(300)
+            time.sleep(300)
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

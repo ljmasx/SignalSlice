@@ -2,10 +2,13 @@
 """
 SignalSlice Web Application
 Real-time dashboard for Pentagon Pizza Index monitoring
+
+NOTE: This application uses SYNC Playwright and threading (NOT asyncio)
+to be compatible with Gunicorn + eventlet workers.
 """
 import os
 import json
-import asyncio
+import time
 from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request
 from flask_socketio import SocketIO, emit
@@ -67,8 +70,8 @@ dashboard_state = {
 EST = pytz.timezone('US/Eastern')
 
 # Scanner scheduling variables
-scanner_loop = None
-scanner_task = None
+scanner_thread = None
+scanner_stop_event = threading.Event()
 def add_activity_item(activity_type, message, level='normal'):
     """Add an item to the activity feed and emit to clients"""
     try:
@@ -157,22 +160,22 @@ def get_next_hour_start():
     next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
     return (next_hour - now).total_seconds()
 
-async def run_scanner_cycle():
-    """Run one complete scanner cycle and emit updates"""
+def run_scanner_cycle():
+    """Run one complete scanner cycle and emit updates (SYNC version)"""
     try:
         dashboard_state['scanning'] = True
         socketio.emit('scanning_start')
         current_time = datetime.now(EST)
         add_activity_item('SCAN', f'🕐 Starting hourly scan at {current_time.strftime("%Y-%m-%d %H:%M:%S EST")}', 'normal')
-        
+
         # Step 1: Scrape data with detailed updates
         add_activity_item('SCRAPE', f'📡 Scraping current hour data for {current_time.strftime("%A %I:%M %p")}...', 'normal')
         add_activity_item('SCRAPE', f'📅 Looking for TODAY\'s ({current_time.strftime("%A")}) data at hour {current_time.hour}', 'normal')
         add_activity_item('SCRAPE', '🎯 Priority: LIVE data > Historical data > No data', 'normal')
-        
-        # Run the actual scraping
+
+        # Run the actual scraping (now SYNC)
         try:
-            scraped_data = await scrape_current_hour()
+            scraped_data = scrape_current_hour()
             # logger.debug(f"Scraped {len(scraped_data)} data points")
             
             # Validate scraped data
@@ -340,74 +343,73 @@ async def run_scanner_cycle():
         add_activity_item('ERROR', f'❌ Scanner error: {error_msg}', 'critical')
         socketio.emit('scanning_complete')
         logger.error(f"Scanner error: {e}", exc_info=True)
-async def hourly_scanner():
-    """Main scanner loop that runs hourly"""
+def hourly_scanner():
+    """Main scanner loop that runs hourly (SYNC version with threading)"""
     logger.info("🛰️ SignalSlice Integrated Scanner Starting...")
     add_activity_item('INIT', '🛰️ SignalSlice integrated scanner starting...', 'normal')
     add_activity_item('INIT', '🔄 Running initial scan, then switching to hourly schedule', 'normal')
-    
+
     # Run initial scan
-    await run_scanner_cycle()
-    
-    while dashboard_state['scanner_running']:
+    run_scanner_cycle()
+
+    while dashboard_state['scanner_running'] and not scanner_stop_event.is_set():
         try:
             # Calculate time until next hour
             sleep_seconds = get_next_hour_start()
             next_run = datetime.now(EST) + timedelta(seconds=sleep_seconds)
-            
+
             logger.info(f"⏰ Next scan scheduled for {next_run.strftime('%H:%M:%S EST')} ({sleep_seconds/60:.1f} minutes)")
             add_activity_item('SYSTEM', f'Scanner on standby - next automated scan in {sleep_seconds/60:.0f} minutes', 'normal')
-            # Sleep until next hour (with small buffer to ensure we're past the hour mark)
-            await asyncio.sleep(min(sleep_seconds + 30, 3600))  # Max 1 hour sleep
-            
+
+            # Sleep until next hour (with small buffer) - use interruptible sleep
+            sleep_time = min(sleep_seconds + 30, 3600)  # Max 1 hour sleep
+            if scanner_stop_event.wait(timeout=sleep_time):
+                # Stop event was set, exit the loop
+                break
+
             # Check if scanner is still running
-            if dashboard_state['scanner_running']:
+            if dashboard_state['scanner_running'] and not scanner_stop_event.is_set():
                 add_activity_item('SYSTEM', 'Hourly scan interval reached - initiating new scan cycle', 'normal')
-                await run_scanner_cycle()
-        except asyncio.CancelledError:
-            add_activity_item('SYSTEM', '🛑 Scanner stopped by user request', 'warning')
-            break
+                run_scanner_cycle()
         except Exception as e:
             add_activity_item('ERROR', f'❌ Scanner loop error: {str(e)}', 'critical')
             logger.error(f"❌ Unexpected error in scanner loop: {e}", exc_info=True)
             # Wait 5 minutes before retrying to avoid rapid failures
             add_activity_item('SYSTEM', 'Waiting 5 minutes before retry to avoid rapid failures', 'warning')
-            await asyncio.sleep(300)
+            if scanner_stop_event.wait(timeout=300):
+                break
+
+    add_activity_item('SYSTEM', '🛑 Scanner stopped', 'warning')
 def start_scanner():
-    """Start the scanner in a separate thread"""
-    global scanner_loop, scanner_task
-    
-    def run_scanner_loop():
-        global scanner_loop, scanner_task
-        scanner_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(scanner_loop)
-        
-        dashboard_state['scanner_running'] = True
-        scanner_task = scanner_loop.create_task(hourly_scanner())
-        
-        try:
-            scanner_loop.run_until_complete(scanner_task)
-        except Exception as e:
-            logger.error(f"Scanner thread error: {e}", exc_info=True)
-        finally:
-            scanner_loop.close()
-    
-    scanner_thread = threading.Thread(target=run_scanner_loop)
+    """Start the scanner in a separate thread (SYNC version)"""
+    global scanner_thread
+
+    if dashboard_state['scanner_running']:
+        logger.warning("Scanner already running")
+        return None
+
+    scanner_stop_event.clear()
+    dashboard_state['scanner_running'] = True
+
+    scanner_thread = threading.Thread(target=hourly_scanner, name="ScannerThread")
     scanner_thread.daemon = True
     scanner_thread.start()
+    logger.info("Scanner thread started")
     return scanner_thread
 
+
 def stop_scanner():
-    """Stop the scanner"""
-    global scanner_loop, scanner_task
-    
+    """Stop the scanner (SYNC version)"""
+    global scanner_thread
+
     dashboard_state['scanner_running'] = False
-    
-    if scanner_task and not scanner_task.done():
-        scanner_task.cancel()
-    
-    if scanner_loop:
-        scanner_loop.call_soon_threadsafe(scanner_loop.stop)
+    scanner_stop_event.set()
+
+    if scanner_thread and scanner_thread.is_alive():
+        logger.info("Waiting for scanner thread to stop...")
+        scanner_thread.join(timeout=5)
+        if scanner_thread.is_alive():
+            logger.warning("Scanner thread did not stop gracefully")
 
 @app.route('/')
 def index():
@@ -452,21 +454,12 @@ def trigger_manual_scan():
         # Check if scanner is already running
         if dashboard_state['scanning']:
             return jsonify({'status': 'scan_already_running', 'message': 'A scan is already in progress'}), 409
-        
-        def run_async_scan():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(run_scanner_cycle())
-                loop.close()
-            except Exception as e:
-                logger.error(f"Manual scan thread error: {e}", exc_info=True)
-        
-        # Run in separate thread to avoid blocking
-        scan_thread = threading.Thread(target=run_async_scan)
+
+        # Run in separate thread to avoid blocking (SYNC version)
+        scan_thread = threading.Thread(target=run_scanner_cycle, name="ManualScanThread")
         scan_thread.daemon = True
         scan_thread.start()
-        
+
         return jsonify({'status': 'scan_triggered', 'message': 'Manual scan started'})
     except Exception as e:
         logger.error(f"API error in /api/trigger_scan: {e}")
@@ -529,17 +522,9 @@ def handle_manual_scan():
         if dashboard_state['scanning']:
             emit('scan_error', {'message': 'A scan is already in progress'})
             return
-        
-        def run_async_scan():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(run_scanner_cycle())
-                loop.close()
-            except Exception as e:
-                logger.error(f"WebSocket manual scan error: {e}", exc_info=True)
-        
-        scan_thread = threading.Thread(target=run_async_scan)
+
+        # Run in separate thread (SYNC version)
+        scan_thread = threading.Thread(target=run_scanner_cycle, name="WebSocketScanThread")
         scan_thread.daemon = True
         scan_thread.start()
     except Exception as e:
