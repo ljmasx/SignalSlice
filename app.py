@@ -179,24 +179,47 @@ def run_scanner_cycle():
         # Run the actual scraping (now SYNC)
         try:
             scraped_data = scrape_current_hour()
-            # logger.debug(f"Scraped {len(scraped_data)} data points")
-            
+            logger.info(f"🔍 DEBUG: Scraped {len(scraped_data)} data points from scraper")
+
+            # DEBUG: Log first item to see structure
+            if scraped_data:
+                first_item = scraped_data[0]
+                logger.info(f"🔍 DEBUG: First item keys: {list(first_item.keys())}")
+                logger.info(f"🔍 DEBUG: First item venue_type: {first_item.get('venue_type')}")
+                logger.info(f"🔍 DEBUG: First item busyness_percent: {first_item.get('busyness_percent')} (type: {type(first_item.get('busyness_percent')).__name__})")
+
+                # Count venue types
+                venue_counts = {}
+                for d in scraped_data:
+                    vt = d.get('venue_type', 'MISSING')
+                    venue_counts[vt] = venue_counts.get(vt, 0) + 1
+                logger.info(f"🔍 DEBUG: Venue type counts BEFORE validation: {venue_counts}")
+
             # Validate scraped data
             try:
                 validated_data = validate_batch_data(scraped_data)
-                # logger.debug(f"Validated {len(validated_data)} data points")
+                logger.info(f"🔍 DEBUG: Validated {len(validated_data)} data points")
+
+                # DEBUG: Check venue types after validation
+                if validated_data:
+                    venue_counts_after = {}
+                    for d in validated_data:
+                        vt = d.get('venue_type', 'MISSING')
+                        venue_counts_after[vt] = venue_counts_after.get(vt, 0) + 1
+                    logger.info(f"🔍 DEBUG: Venue type counts AFTER validation: {venue_counts_after}")
+
                 scraped_data = validated_data
             except Exception as e:
                 logger.error(f"Data validation error: {e}")
                 add_activity_item('WARNING', f'Some data validation errors occurred - continuing with valid data', 'warning')
-            
+
             add_activity_item('SCRAPE', '✅ Current hour data saved successfully', 'success')
             add_activity_item('SCRAPE', 'Data scraping completed', 'success')
-            
+
             # Separate data by venue type
             restaurant_data = [d for d in scraped_data if d.get('venue_type') == 'restaurant']
             gay_bar_data = [d for d in scraped_data if d.get('venue_type') == 'gay_bar']
-            # logger.debug(f"Found {len(restaurant_data)} restaurant data points, {len(gay_bar_data)} gay bar data points")
+            logger.info(f"🔍 DEBUG: After filtering - {len(restaurant_data)} restaurants, {len(gay_bar_data)} gay bars")
             
             # Calculate pizza index from restaurant data  
             if restaurant_data:
