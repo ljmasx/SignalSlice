@@ -12,138 +12,168 @@ from validation import validate_busyness_percent, ValidationError
 # Configure logging
 logger = logging.getLogger(__name__)
 
-THRESHOLD = 25  # how much higher than baseline to consider an anomaly
+# =============================================================================
+# ANOMALY DETECTION THRESHOLDS
+# =============================================================================
+
+# Option A: Absolute threshold - alert if ANY restaurant hits this %
+ABSOLUTE_THRESHOLD = 90  # Alert at 90%+ busyness
+
+# Option B: Divergence detection - alert when pizza is busy AND bars are empty
+PIZZA_HIGH_THRESHOLD = 70   # Pizza places considered "busy" at 70%+
+BAR_LOW_THRESHOLD = 30      # Bars considered "empty" at 30% or less
+
+# Legacy baseline comparison (kept but disabled with high threshold)
+BASELINE_THRESHOLD = 150  # Effectively disabled
+
+
 def setup_logging():
     """Setup logging with UTF-8 encoding"""
     try:
-        # Try to set UTF-8 encoding for stdout
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8')
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8')
     except:
-        pass  # Fallback silently if reconfigure not available
+        pass
 
-# Setup UTF-8 logging
 setup_logging()
+
+
 def check_current_anomalies():
-    """Check for anomalies in the current hour and return True if any found"""
-    # Get current time in EST
+    """
+    Check for anomalies using multiple detection methods:
+    1. ABSOLUTE: Any restaurant at 90%+ triggers alert
+    2. DIVERGENCE: Pizza busy (70%+) AND bars empty (30%-) triggers alert
+    """
     est = pytz.timezone('US/Eastern')
     current_time_est = datetime.now(est)
     current_weekday = current_time_est.strftime('%A')
     current_hour = str(current_time_est.hour)
-    # Adjust for Google Maps' day structure: 12 AM belongs to previous day
-    if current_time_est.hour == 0:
-        # 12 AM belongs to previous day
-        baseline_weekday = (current_time_est - timedelta(days=1)).strftime('%A')
-        baseline_hour = "24"  # Treat as hour 24 of previous day
-        logger.info(f"🌍 Local time: {datetime.now().strftime('%A %I:%M %p')}")
-        logger.info(f"🕐 Current EST time: {current_time_est.strftime('%A %I:%M %p')} (Hour {current_hour})")
-        logger.info(f"📅 Checking anomalies for PREVIOUS day ({baseline_weekday}) at hour 24 (12 AM)\n")
-    else:
-        baseline_weekday = current_weekday
-        baseline_hour = current_hour
-        logger.info(f"🌍 Local time: {datetime.now().strftime('%A %I:%M %p')}")
-        logger.info(f"🕐 Current EST time: {current_time_est.strftime('%A %I:%M %p')} (Hour {current_hour})")
-        logger.info(f"📅 Checking anomalies for {baseline_weekday} at {baseline_hour}:00\n")
 
-    # Load the baseline
-    baseline_path = os.path.join(os.path.dirname(__file__), "..", "baseline.json")
-    try:
-        with open(baseline_path, "r") as f:
-            baseline = json.load(f)
-    except FileNotFoundError:
-        logger.error(f"Baseline file not found at {baseline_path}")
-        return False
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in baseline file: {e}")
-        return False
+    logger.info(f"🌍 Local time: {datetime.now().strftime('%A %I:%M %p')}")
+    logger.info(f"🕐 Current EST time: {current_time_est.strftime('%A %I:%M %p')} (Hour {current_hour})")
+    logger.info(f"\n📊 ANOMALY DETECTION THRESHOLDS:")
+    logger.info(f"   🍕 Absolute alert: {ABSOLUTE_THRESHOLD}%+")
+    logger.info(f"   🍕↑🍸↓ Divergence: Pizza ≥{PIZZA_HIGH_THRESHOLD}% AND Bar ≤{BAR_LOW_THRESHOLD}%\n")
+
     # Find the most recent current hour data file
     data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
     current_hour_pattern = f"current_hour_{current_time_est.strftime('%Y%m%d_%H')}.csv"
     current_hour_file = os.path.join(data_dir, current_hour_pattern)
+
     if not os.path.exists(current_hour_file):
         logger.info(f"⚠️ No current hour data file found: {current_hour_file}")
         return False
-    logger.info("🔍 Checking for anomalies...\n")
+
+    # Collect data by venue type
+    pizza_data = []  # restaurants
+    bar_data = []    # gay_bar + sports_bar
+
     anomalies_found = False
+    absolute_anomalies = []
+
     with open(current_hour_file, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            logger.info(f"📊 Processing row: {row['restaurant_url']}")
-            logger.info(f"   Raw busyness_percent: '{row['busyness_percent']}'")
-            logger.info(f"   Value field: '{row['value']}'")
-            logger.info(f"   Data weekday: {row['weekday']}")
-            logger.info(f"   Data type: {row.get('data_type', 'UNKNOWN')}")
-            # Check for live text flags
-            value_text = row.get('value', '').lower()
-            has_live_text_flag = any(flag in value_text for flag in [
-                "busier than usual", "as busy as it gets"
-            ])
-            if has_live_text_flag:
-                logger.info(f"   🚨 LIVE TEXT FLAG detected!")
-            elif "not busy" in value_text:
-                logger.info(f"   ✅ LIVE TEXT: 'Not busy' - no flag")
-            
+            venue_type = row.get('venue_type', 'restaurant')
+
             # Skip rows with no busyness data
-            if not row["busyness_percent"] or row["busyness_percent"] == "None":
-                logger.info(f"ℹ️ No busyness data available for {row['restaurant_url']} at this hour")
+            if not row.get("busyness_percent") or row["busyness_percent"] == "None":
+                logger.info(f"ℹ️ No data for {row['restaurant_url']}")
                 continue
-            # Validate and convert busyness percentage
+
             try:
-                current = validate_busyness_percent(row["busyness_percent"])
-                if current is None:
+                busyness = validate_busyness_percent(row["busyness_percent"])
+                if busyness is None:
                     continue
             except ValidationError as e:
                 logger.error(f"Invalid busyness data: {e}")
                 continue
-            expected = baseline.get(baseline_weekday, {}).get(baseline_hour)
-            data_type = row.get('data_type', 'UNKNOWN')
-            logger.info(f"   Current busyness: {current}% ({data_type})")
-            logger.info(f"   Expected baseline ({baseline_weekday} hour {baseline_hour}): {expected}%")
 
-            if expected is None:
-                logger.warning(f"No baseline for {baseline_weekday} {baseline_hour}:00")
-                continue
-            
-            # Ensure expected is a valid number
-            try:
-                expected = float(expected)
-            except (TypeError, ValueError):
-                logger.error(f"Invalid baseline value: {expected}")
-                continue
+            data_type = row.get('data_type', 'HISTORICAL')
 
-            diff = current - expected
-            logger.info(f"   Difference: {diff}% (threshold: {THRESHOLD}%)")
-            
-            # Enhanced anomaly detection with text flags
-            is_threshold_anomaly = diff >= THRESHOLD
-            if is_threshold_anomaly or has_live_text_flag:
-                if data_type == "LIVE" and has_live_text_flag:
-                    anomaly_prefix = "🚨🔴🚨 CRITICAL LIVE ANOMALY"
-                elif data_type == "LIVE":
-                    anomaly_prefix = "🚨🔴 LIVE ANOMALY"
-                elif has_live_text_flag:
-                    anomaly_prefix = "🚨📝 TEXT FLAG ANOMALY"
-                else:
-                    anomaly_prefix = "🚨 ANOMALY"
-                    
-                logger.info(f"{anomaly_prefix} DETECTED at {row['restaurant_url']}")
-                logger.info(f"    📅 {baseline_weekday} {baseline_hour}:00")
-                logger.info(f"    📊 Current: {current}% | Baseline: {expected}% | Δ: +{diff}%")
-                logger.info(f"    🎯 Data type: {data_type}")
-                if has_live_text_flag:
-                    logger.info(f"    🚨 LIVE TEXT FLAG detected!")
-                if data_type == "LIVE":
-                    logger.info(f"    🔥 This is REAL-TIME activity - high confidence!")
-                logger.info(f"    🕐 Detected at: {current_time_est.strftime('%Y-%m-%d %H:%M:%S EST')}\n")
-                anomalies_found = True
+            # Categorize by venue type
+            if venue_type == 'restaurant':
+                pizza_data.append({
+                    'url': row['restaurant_url'],
+                    'busyness': busyness,
+                    'data_type': data_type
+                })
+
+                # CHECK 1: Absolute threshold (90%+)
+                if busyness >= ABSOLUTE_THRESHOLD:
+                    absolute_anomalies.append({
+                        'url': row['restaurant_url'],
+                        'busyness': busyness,
+                        'data_type': data_type
+                    })
             else:
-                status_icon = "✅🔴" if data_type == "LIVE" else "✅"
-                logger.info(f"{status_icon} Normal activity at {row['restaurant_url']}: {current}% (baseline: {expected}%) [{data_type}]")
+                # gay_bar or sports_bar
+                bar_data.append({
+                    'url': row['restaurant_url'],
+                    'busyness': busyness,
+                    'data_type': data_type,
+                    'venue_type': venue_type
+                })
+
+    # Calculate averages
+    pizza_avg = sum(d['busyness'] for d in pizza_data) / len(pizza_data) if pizza_data else 0
+    bar_avg = sum(d['busyness'] for d in bar_data) / len(bar_data) if bar_data else None
+
+    logger.info(f"\n📊 SCAN SUMMARY:")
+    logger.info(f"   🍕 Pizza places: {len(pizza_data)} venues, avg {pizza_avg:.1f}%")
+    if bar_data:
+        logger.info(f"   🍸 Bars: {len(bar_data)} venues, avg {bar_avg:.1f}%")
+    else:
+        logger.info(f"   🍸 Bars: No data available")
+
+    # ==========================================================================
+    # ANOMALY CHECK 1: Absolute threshold (90%+)
+    # ==========================================================================
+    if absolute_anomalies:
+        anomalies_found = True
+        logger.info(f"\n🚨🍕 ABSOLUTE THRESHOLD ALERT 🚨")
+        logger.info(f"   {len(absolute_anomalies)} restaurant(s) at {ABSOLUTE_THRESHOLD}%+ busyness!")
+        for a in absolute_anomalies:
+            logger.info(f"   🔥 {a['url']}: {a['busyness']}% [{a['data_type']}]")
+        logger.info(f"   🕐 Detected at: {current_time_est.strftime('%Y-%m-%d %H:%M:%S EST')}")
+
+    # ==========================================================================
+    # ANOMALY CHECK 2: Divergence (Pizza busy + Bars empty)
+    # ==========================================================================
+    if bar_avg is not None:
+        is_pizza_high = pizza_avg >= PIZZA_HIGH_THRESHOLD
+        is_bar_low = bar_avg <= BAR_LOW_THRESHOLD
+
+        if is_pizza_high and is_bar_low:
+            anomalies_found = True
+            logger.info(f"\n🚨🍕↑🍸↓ DIVERGENCE ALERT 🚨")
+            logger.info(f"   Pizza places are BUSY ({pizza_avg:.1f}%) while bars are EMPTY ({bar_avg:.1f}%)!")
+            logger.info(f"   ⚠️ This pattern suggests unusual late-night activity (crisis mode?)")
+            logger.info(f"   🕐 Detected at: {current_time_est.strftime('%Y-%m-%d %H:%M:%S EST')}")
+        else:
+            # Log why divergence wasn't triggered
+            if is_pizza_high:
+                logger.info(f"\n   🍕 Pizza HIGH ({pizza_avg:.1f}% ≥ {PIZZA_HIGH_THRESHOLD}%) but bars not empty ({bar_avg:.1f}%)")
+            elif is_bar_low:
+                logger.info(f"\n   🍸 Bars LOW ({bar_avg:.1f}% ≤ {BAR_LOW_THRESHOLD}%) but pizza not busy ({pizza_avg:.1f}%)")
+            else:
+                logger.info(f"\n   ✅ Normal pattern: Pizza {pizza_avg:.1f}%, Bars {bar_avg:.1f}%")
+    else:
+        logger.info(f"\n   ⚠️ Cannot check divergence: no bar data available")
+
+    # ==========================================================================
+    # FINAL STATUS
+    # ==========================================================================
+    if anomalies_found:
+        logger.info(f"\n🚨 ANOMALY DETECTED - Alert triggered!")
+    else:
+        logger.info(f"\n✅ No anomalies detected - All systems normal")
+
     return anomalies_found
-# Check for current anomalies when the script is run
+
+
 if __name__ == "__main__":
     try:
         anomalies_found = check_current_anomalies()
